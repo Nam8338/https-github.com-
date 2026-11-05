@@ -1,14 +1,355 @@
-<!-- Thanh trạng thái người chơi & Bảng xếp hạng -->
-<div class="user-strip" style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:3px solid var(--line);border-radius:20px;padding:8px 16px;margin-bottom:12px;">
-  <div style="display:flex;align-items:center;gap:8px;">
-    <span id="authAvatar" style="font-size:22px;">👤</span>
-    <span id="authGreeting" style="font-weight:700;">Đang chơi với tư cách Khách</span>
-    <button class="btn alt" id="authActionBtn" style="padding:4px 12px;font-size:14px;">Đăng nhập / Đăng ký</button>
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Green Planet – Game Sinh Thái & Tiếng Anh</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap">
+<!-- Supabase JS Client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#DDF1FF;--card:#FFFDF6;--ink:#233D5C;--soft:#3E5875;--line:#C9DFF0;
+  --green:#3DBE6E;--green-d:#1E7A46;--mint:#DFF5E5;--sun:#FFC93C;--coral:#FF8A6B;--coral-d:#B23E22;
+  --blue:#4A90D9;--purple:#9B7BE0;--cream:#FFF8E7;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#13253A;--card:#1C344F;--ink:#F3F7FB;--soft:#B7CADD;--line:#2E4C6B;--mint:#183B31;--cream:#203449;--green-d:#7FE0A2;--coral-d:#FFB09A}
+}
+:root[data-theme="dark"]{--bg:#13253A;--card:#1C344F;--ink:#F3F7FB;--soft:#B7CADD;--line:#2E4C6B;--mint:#183B31;--cream:#203449;--green-d:#7FE0A2;--coral-d:#FFB09A}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Nunito',Arial,sans-serif;font-size:17px;line-height:1.5}
+h1,h2,h3{font-family:'Baloo 2','Nunito',Arial,sans-serif;line-height:1.15;margin:0}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.wrap{max-width:1040px;margin:0 auto;padding:16px}
+
+/* header & auth strip */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-bottom:12px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:32px}
+.brand span{font-size:34px}
+.stats{display:flex;flex-wrap:wrap;gap:8px}
+.pill{background:var(--card);border:3px solid var(--line);border-radius:999px;padding:4px 14px;font-weight:800;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.pill.pts{border-color:var(--sun)}
+.pill.lv{border-color:var(--green)}
+.user-strip{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;background:var(--card);border:3px solid var(--line);border-radius:20px;padding:8px 16px;margin-bottom:12px}
+
+/* scene */
+.stage{background:var(--card);border-radius:28px;border:4px solid var(--line);overflow:hidden}
+#scene{display:block;width:100%;height:auto}
+#scene *{transition:opacity .9s ease,fill .9s ease}
+.tree .grow{transform-box:fill-box;transform-origin:50% 100%;transform:scale(0);transition:transform .7s cubic-bezier(.3,1.6,.5,1)}
+.tree.on .grow{transform:scale(1)}
+.blades{transform-box:view-box;transform-origin:188px 122px;animation:spin 3s linear infinite}
+.puff{animation:drift 4s ease-in-out infinite}
+.p2{animation-delay:-1.3s}.p3{animation-delay:-2.6s}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{50%{transform:translate(8px,-6px)}}
+@media (prefers-reduced-motion:reduce){.blades,.puff{animation:none}.tree .grow{transition:none}}
+.health{display:flex;align-items:center;gap:12px;padding:12px 18px;flex-wrap:wrap}
+.health b{font-family:'Baloo 2',sans-serif;font-size:20px}
+.bar{flex:1;min-width:160px;height:18px;border-radius:99px;background:var(--cream);border:2px solid var(--line);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--coral),var(--sun),var(--green));transition:width .8s ease}
+
+/* tabs */
+.tabs{display:flex;gap:8px;overflow-x:auto;padding:14px 2px 6px;scrollbar-width:none}
+.tabs button{flex:0 0 auto;border:3px solid var(--line);background:var(--card);border-radius:999px;padding:8px 16px;font-weight:800}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{background:var(--card);border-radius:28px;border:4px solid var(--line);padding:22px;margin-top:6px}
+.panel[hidden]{display:none}
+.panel h2{font-size:28px;margin-bottom:4px}
+.lead{color:var(--soft);margin:0 0 16px}
+.note{color:var(--soft);font-size:15px}
+
+/* quests */
+.mode{display:inline-block;background:var(--mint);color:var(--ink);border-radius:999px;padding:2px 12px;font-weight:800;font-size:14px;margin-bottom:14px}
+.qlist{display:grid;gap:12px}
+.quest{display:flex;align-items:center;gap:14px;border:3px solid var(--line);border-radius:22px;padding:12px 14px;background:var(--cream)}
+.quest .ico{font-size:34px;flex:0 0 auto}
+.quest .txt{flex:1;min-width:0}
+.quest .txt p{margin:0;font-weight:700}
+.quest .vi{color:var(--soft);font-weight:600;font-size:15px}
+.kw{background:var(--sun);color:#233D5C;border-radius:8px;padding:0 6px}
+.quest.done{opacity:.7;border-style:dashed}
+.btn{border:none;border-radius:999px;padding:10px 18px;font-weight:800;background:var(--green);color:#0F3D22}
+.btn.alt{background:var(--cream);color:var(--ink);border:3px solid var(--line);padding:7px 14px}
+.btn.coral{background:var(--coral);color:#2A1208}
+.btn:disabled{opacity:.55;cursor:default}
+.mini{border:none;background:none;font-size:20px;padding:4px 6px;border-radius:10px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.badge{border-radius:999px;padding:4px 12px;font-weight:800;font-size:14px;background:var(--cream);border:2px dashed var(--line);color:var(--soft)}
+.badge.got{background:var(--sun);border:2px solid var(--sun);color:#233D5C}
+
+/* sort game */
+.game{display:grid;gap:16px}
+.item{text-align:center;background:var(--cream);border-radius:26px;padding:18px;border:3px solid var(--line)}
+.item .emo{font-size:72px;line-height:1.1}
+.item .en{font-family:'Baloo 2',sans-serif;font-size:34px;font-weight:800}
+.bins{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (max-width:620px){.bins{grid-template-columns:repeat(2,1fr)}}
+.bin{border:none;border-radius:24px;padding:14px 8px;color:#16263A;font-weight:800;display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .15s}
+.bin:active{transform:scale(.96)}
+.bin .be{font-size:34px}
+.bin .bn{font-family:'Baloo 2',sans-serif;font-size:20px}
+.bin .bv{font-size:13px;font-weight:700;opacity:.85}
+.fb{min-height:52px;border-radius:18px;padding:10px 14px;font-weight:700}
+.fb.ok{background:var(--mint);color:var(--green-d)}
+.fb.no{background:#FFE1D8;color:#8A2C14}
+.dots{display:flex;gap:6px;justify-content:center}
+.dots i{width:12px;height:12px;border-radius:50%;background:var(--line)}
+.dots i.ok{background:var(--green)}.dots i.no{background:var(--coral)}.dots i.cur{outline:3px solid var(--sun)}
+.words{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.word{background:var(--mint);border-radius:14px;padding:4px 10px;font-weight:700;font-size:15px}
+.word small{color:var(--soft);font-weight:600}
+
+/* scanner, coach, journal */
+.drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:3px dashed var(--line);border-radius:24px;padding:22px;text-align:center;background:var(--cream);cursor:pointer}
+.drop .big{font-size:48px}
+.preview{max-width:100%;max-height:260px;border-radius:18px;display:block;margin:12px auto 0;object-fit:contain}
+.result{border:3px solid var(--green);background:var(--mint);border-radius:22px;padding:16px;margin-top:14px}
+.result .en{font-family:'Baloo 2',sans-serif;font-size:30px;font-weight:800}
+.chip{display:inline-block;border-radius:999px;padding:3px 12px;font-weight:800;color:#16263A}
+.pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:10px}
+.pick button{border:3px solid var(--line);background:var(--cream);border-radius:18px;padding:8px;font-weight:700}
+.pick button span{display:block;font-size:30px}
+textarea{width:100%;min-height:96px;border-radius:18px;border:3px solid var(--line);background:var(--cream);padding:12px 14px;resize:vertical}
+.plan{display:grid;gap:10px;margin-top:14px}
+.tip{display:flex;gap:12px;align-items:flex-start;background:var(--cream);border:3px solid var(--line);border-radius:20px;padding:12px 14px}
+.tip .ico{font-size:30px}
+.tip p{margin:0}
+.tip .q{font-weight:800;color:var(--green-d)}
+.bubble{border-radius:22px;padding:12px 16px;margin-top:10px}
+.bubble.me{background:var(--cream);border:3px solid var(--line)}
+.bubble.ai{background:var(--mint);border:3px solid var(--green)}
+.bubble .lbl{font-weight:800;font-size:14px;color:var(--soft)}
+.entries{margin-top:16px;display:grid;gap:8px}
+.entry{font-size:15px;background:var(--cream);border-radius:14px;padding:8px 12px}
+
+/* future */
+input[type=range]{width:100%;accent-color:var(--coral)}
+.years{display:flex;justify-content:space-between;font-family:'Baloo 2',sans-serif;font-weight:800;font-size:20px}
+.meters{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}
+@media (max-width:620px){.meters{grid-template-columns:1fr}}
+.meter{background:var(--cream);border:3px solid var(--line);border-radius:20px;padding:12px}
+.meter b{display:block;font-size:17px}
+.meter .bar{margin:8px 0 4px;height:14px}
+.meter .bar i{background:var(--coral)}
+.meter.good .bar i{background:var(--green)}
+.verdict{font-family:'Baloo 2',sans-serif;font-size:24px;font-weight:800}
+
+.foot{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;margin:16px 4px 28px;color:var(--soft);font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,40px);opacity:0;background:var(--ink);color:var(--bg);font-weight:800;padding:10px 20px;border-radius:999px;transition:all .35s;pointer-events:none;z-index:99;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* 3D & Mini-games */
+.qh{font-size:26px;margin:14px 0 2px}
+.inst{font-weight:800;font-size:19px;margin:6px 0}
+.inst .vi,.choice .vi,.room .vi,#qplay .vi{display:block;font-weight:600;font-size:15px;color:var(--soft)}
+.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.choice{border:3px solid var(--line);background:var(--cream);border-radius:22px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.choice .ce{font-size:44px;line-height:1.2}
+.choice b{font-family:'Baloo 2',sans-serif;font-size:21px}
+.choice.wrong{border-color:var(--coral);opacity:.6}
+.stage{position:relative}
+.viewtog{position:absolute;top:12px;left:12px;z-index:2;display:flex;gap:6px;background:rgba(255,253,246,.85);padding:5px;border-radius:999px}
+.viewtog button{border:none;border-radius:999px;padding:6px 14px;font-weight:800;background:transparent;color:#233D5C}
+.viewtog button[aria-pressed="true"]{background:#233D5C;color:#FFF8E7}
+.view3d[hidden]{display:none}
+.viewtog[hidden]{display:none}
+.view3d{position:relative;aspect-ratio:900/340;min-height:280px;background:radial-gradient(ellipse at 50% 45%,#22406b 0%,#0d1a2e 70%);overflow:hidden;cursor:grab;touch-action:pan-y}
+.view3d:active{cursor:grabbing}
+.view3d canvas{display:block;width:100%;height:100%}
+.view3d.city{background:#9ED8FF}
+.view3d .hint{position:absolute;right:14px;bottom:8px;margin:0;color:#DDEBFA;font-size:14px;font-weight:700;opacity:.8}
+.pins{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pin{position:absolute;left:0;top:0;pointer-events:auto;border:none;border-radius:999px;padding:4px 12px 4px 7px;background:rgba(255,253,246,.93);color:#233D5C;font-weight:800;font-size:14px;display:flex;align-items:center;gap:5px;box-shadow:0 3px 0 rgba(0,0,0,.28);white-space:nowrap;transition:opacity .25s,background .3s}
+.pin.sel{background:#FF8A6B;color:#2A1208}
+.pin.saved{background:#3DBE6E;color:#0F3D22}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.ccard{border:3px solid var(--line);background:var(--cream);border-radius:24px;padding:14px 16px;text-align:left;display:flex;flex-direction:column;gap:3px;box-shadow:0 6px 0 rgba(35,61,92,.18);cursor:pointer}
+.ccard .ce{font-size:38px;line-height:1.1}
+.ccard b{font-family:'Baloo 2',sans-serif;font-size:23px}
+.ccard.saved{border-color:var(--green);background:var(--mint)}
+.cprob{background:#FFE1D8;color:#4A1E10;border-radius:22px;padding:14px 18px;font-weight:600;margin-top:10px}
+.cprob .en{display:block;margin-top:6px;font-weight:800}
+.cbar{height:16px;border-radius:99px;background:var(--cream);border:2px solid var(--line);overflow:hidden;margin:14px 0}
+.cbar i{display:block;height:100%;background:linear-gradient(90deg,var(--sun),var(--green));transition:width .6s}
+
+/* river */
+.rv{position:relative;height:370px;border-radius:24px;overflow:hidden;border:3px solid var(--line);background:#BFE6FF;user-select:none}
+.rv .sky{position:absolute;left:0;right:0;top:0;height:31%;background:linear-gradient(#8FD3FF,#D6F0FF)}
+.rv .sun{position:absolute;right:9%;top:12%;width:44px;height:44px;border-radius:50%;background:#FFC93C}
+.rv .water{position:absolute;left:0;right:0;top:31%;bottom:0;background:linear-gradient(#4AB3F0,#1C6FB8)}
+.rv .murk{position:absolute;left:0;right:0;top:31%;bottom:0;background:#6B5A3A;opacity:.55;pointer-events:none;transition:opacity .7s}
+.rv .it{position:absolute;font-size:38px;line-height:1;background:none;border:none;padding:4px;cursor:pointer;animation:drift var(--d) linear var(--dl) infinite;z-index:2}
+@keyframes drift{from{left:-12%}to{left:106%}}
+.rv .net{position:absolute;right:10px;top:10px;background:rgba(255,253,246,.92);border-radius:16px;padding:4px 14px;font-weight:800;color:#233D5C;z-index:3}
+.rv .say{position:absolute;left:3%;top:3%;background:#FFFDF6;color:#233D5C;border-radius:14px;padding:4px 10px;font-weight:700;font-size:14px;max-width:58%;z-index:3}
+
+/* house */
+.house{position:relative;width:calc(100% - 32px);max-width:680px;margin:6px auto 0;padding-bottom:54px}
+.house .roof{height:60px;background:linear-gradient(#D9483B,#B23A2E);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.floors{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;background:#A0673A;padding:6px}
+.rm{position:relative;height:120px;border-radius:8px;background:#FFF4D6;overflow:hidden;cursor:pointer}
+.rm.off{background:#243A57}
+.rm .lamp{position:absolute;top:0;left:50%;transform:translateX(-50%);font-size:20px}
+.rm .nm{position:absolute;top:6px;left:6px;font-weight:800;font-size:12px;background:rgba(255,253,246,.92);border-radius:8px;padding:0 6px}
+.rm .furn{position:absolute;bottom:6px;left:8px;font-size:32px}
+.rm .who{position:absolute;bottom:6px;left:50%;font-size:28px}
+.sw{position:absolute;right:8px;top:40px;width:28px;height:40px;border-radius:6px;background:#F3F7FB;border:2px solid #9AA1AA;cursor:pointer}
+.sw i{display:block;width:12px;height:14px;margin:2px auto 0;border-radius:2px;background:#48BB78}
+.rm.off .sw i{background:#9AA1AA;margin-top:18px}
+.meterE{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:800}
+
+/* travel */
+.route{display:flex;align-items:center;gap:8px;background:linear-gradient(#DDF1FF 52%,#9ED19B 52%);border-radius:22px;padding:22px 14px;margin:6px 0 12px;position:relative;overflow:hidden}
+.road2{position:relative;flex:1;height:36px;border-radius:10px;background:#5F6670}
+.veh{position:absolute;left:1%;top:50%;transform:translateY(-50%);font-size:32px;transition:left 1.5s ease-in-out}
+.veh.go{left:85%}
+
+/* garden */
+.garden{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:40px 14px 14px;border-radius:24px;background:linear-gradient(#BFE6FF 0 50px,#7FD69C 50px);border:3px solid var(--line)}
+.plot{position:relative;height:120px;border:none;border-radius:18px;background:rgba(255,255,255,.2);display:flex;align-items:flex-end;justify-content:center;padding-bottom:12px;cursor:pointer}
+.plot.sel{outline:4px solid #FFC93C}
+.plot .soil{position:absolute;bottom:6px;left:50%;width:64%;height:18px;transform:translateX(-50%);border-radius:50%;background:#6DBF7A}
+.plot[data-s="1"] .soil,.plot[data-s="2"] .soil{background:#4A3426;height:22px}
+.plot[data-s="3"] .soil,.plot[data-s="4"] .soil{background:#8B5A2B;height:26px}
+.plot .pl{font-size:36px;z-index:1}
+.plot .tag{position:absolute;top:6px;left:8px;font-size:11px;font-weight:800;background:rgba(255,253,246,.88);border-radius:6px;padding:0 4px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.steps span{border-radius:999px;padding:3px 12px;font-weight:800;font-size:14px;background:var(--cream);border:2px solid var(--line)}
+.steps span.now{background:#FFC93C;border-color:#FFC93C;color:#233D5C}
+.steps span.past{background:var(--mint);color:var(--green-d)}
+.info{background:#233D5C;color:#FFF8E7;border-radius:18px;padding:12px 16px;font-weight:700}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span aria-hidden="true">🌍</span><h1>Green Planet</h1></div>
+    <div class="stats">
+      <div class="pill pts">⭐ <span id="pts">0</span> điểm</div>
+      <div class="pill lv"><span id="lvE">🌰</span> <span id="lvN">Seed</span></div>
+      <div class="pill">🔤 <span id="wc">0</span> từ</div>
+    </div>
+  </header>
+
+  <!-- Thanh thông tin người chơi & Bảng xếp hạng -->
+  <div class="user-strip">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span id="authAvatar" style="font-size:22px;">👤</span>
+      <span id="authGreeting" style="font-weight:700;">Đang chơi với tư cách Khách</span>
+      <button class="btn alt" id="authActionBtn" style="padding:4px 12px;font-size:14px;">Đăng nhập / Đăng ký</button>
+    </div>
+    <button class="btn alt" id="openRankBtn" style="padding:4px 14px;font-size:14px;font-weight:800;">🏆 Bảng xếp hạng</button>
   </div>
-  <button class="btn alt" id="openRankBtn" style="padding:4px 14px;font-size:14px;font-weight:800;">🏆 Bảng xếp hạng</button>
+
+  <section class="stage" aria-label="Thế giới Green Planet">
+    <div class="viewtog" id="viewtog" role="group" aria-label="Chọn chế độ xem">
+      <button data-view="3d" aria-pressed="true">🌍 Trái Đất 3D</button>
+      <button data-view="2d" aria-pressed="false">🏙️ Thành phố 3D</button>
+    </div>
+    <div class="view3d" id="v3d"><canvas id="earth" aria-label="Trái Đất 3D"></canvas><div class="pins" id="pins"></div><p class="hint">👆 Kéo xoay · Chạm châu lục để giải cứu</p></div>
+    <div class="view3d city" id="vcity" hidden><canvas id="citycv" aria-label="Thành phố 3D"></canvas><p class="hint">👆 Kéo để xoay thành phố</p></div>
+    
+    <svg id="scene" viewBox="0 0 900 340" role="img" style="display:none;">
+      <rect id="sky" width="900" height="340" fill="#9ED8FF"/>
+      <circle id="sun" cx="800" cy="62" r="36" fill="#FFC93C"/>
+      <path id="hill" d="M0 225 Q 150 175 320 212 T 640 200 T 900 196 V340 H0Z" fill="#7FD69C"/>
+      <path id="river" d="M0 296 Q 225 282 450 296 T 900 294 V340 H0Z" fill="#4AB3F0"/>
+    </svg>
+    <div class="health">
+      <b>Sức khỏe Trái Đất</b>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="hbar"><i id="hfill" style="width:12%"></i></div>
+      <b id="hpct">12%</b>
+    </div>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="world" aria-selected="true">🗺️ Giải cứu châu lục</button>
+    <button role="tab" data-tab="quest" aria-selected="false">🎮 Nhiệm vụ</button>
+    <button role="tab" data-tab="sort" aria-selected="false">🗑️ Phân loại rác</button>
+    <button role="tab" data-tab="scan" aria-selected="false">📸 Waste Scanner</button>
+    <button role="tab" data-tab="coach" aria-selected="false">🤖 AI Coach</button>
+    <button role="tab" data-tab="journal" aria-selected="false">📔 Green Journal</button>
+    <button role="tab" data-tab="future" aria-selected="false">⏳ Năm 2050</button>
+  </nav>
+
+  <section class="panel" id="p-world" role="tabpanel">
+    <h2>Giải cứu châu lục</h2>
+    <p class="lead">Mỗi châu lục có một vấn đề ô nhiễm riêng. Hoàn thành 3 thử thách để hồi sinh hành tinh.</p>
+    <div id="wbody"></div>
+  </section>
+
+  <section class="panel" id="p-quest" role="tabpanel" hidden>
+    <h2>Nhiệm vụ hôm nay</h2>
+    <p class="lead">Làm nhiệm vụ để tích lũy điểm và mở khóa các danh hiệu bảo vệ môi trường.</p>
+    <span class="mode" id="mode"></span>
+    <div class="qlist" id="qlist"></div>
+    <div id="qplay" hidden></div>
+    <div class="badges" id="badges"></div>
+  </section>
+
+  <section class="panel" id="p-sort" role="tabpanel" hidden>
+    <h2>Phân loại rác bằng tiếng Anh</h2>
+    <p class="lead">Đọc tên món rác và chọn thùng phù hợp. Đúng được +10 điểm và thêm thẻ từ mới.</p>
+    <div class="game" id="game"></div>
+    <h3 style="margin-top:18px;font-size:20px">Green Words đã sưu tầm</h3>
+    <div class="words" id="words"></div>
+  </section>
+
+  <section class="panel" id="p-scan" role="tabpanel" hidden>
+    <h2>AI Waste Scanner</h2>
+    <p class="lead">Chụp hoặc chọn ảnh món rác để học từ vựng và cách phân loại.</p>
+    <div id="scanNoAI">
+      <p class="note">Chọn một món rác mẫu để thử nghiệm:</p>
+      <div class="pick" id="pick"></div>
+    </div>
+    <div id="scanResult"></div>
+  </section>
+
+  <section class="panel" id="p-coach" role="tabpanel" hidden>
+    <h2>AI Green Coach</h2>
+    <p class="lead">Kể thói quen hàng ngày của bạn để nhận kế hoạch sống xanh.</p>
+    <textarea id="habit" placeholder="Ví dụ: Mình đi học bằng xe đạp, hay uống nước đóng chai..."></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="coachBtn">Lập kế hoạch xanh</button><span id="coachStatus" class="note"></span></div>
+    <div id="coachOut"></div>
+  </section>
+
+  <section class="panel" id="p-journal" role="tabpanel" hidden>
+    <h2>Green Journal</h2>
+    <p class="lead">Viết 1–2 câu tiếng Anh về việc tốt bạn làm hôm nay. Nhận ngay +30 điểm.</p>
+    <textarea id="jtext" placeholder="Today I picked up trash in the park."></textarea>
+    <div class="row" style="margin-top:10px"><button class="btn" id="jBtn">Lưu vào sổ nhật ký</button><span id="jStatus" class="note"></span></div>
+    <div id="jOut"></div>
+    <div class="entries" id="entries"></div>
+  </section>
+
+  <section class="panel" id="p-future" role="tabpanel" hidden>
+    <h2>Mô phỏng tương lai 2050</h2>
+    <p class="lead">Kéo thanh thời gian để thấy ảnh hưởng môi trường theo năm.</p>
+    <input type="range" id="year" min="2026" max="2050" step="1" value="2026">
+    <div class="years"><span>2026</span><span>2035</span><span>2050</span></div>
+    <div class="meters" id="meters"></div>
+    <p class="verdict" id="verdict"></p>
+  </section>
+
+  <div class="foot">
+    <span>Green Planet · Vibe Coding for Real-World Impact</span>
+    <div class="row">
+      <button class="btn alt" id="boost">⚡ +100 điểm (demo)</button>
+      <button class="btn alt" id="reset">↺ Chơi lại từ đầu</button>
+    </div>
+  </div>
 </div>
 
-<!-- Modal Đăng nhập / Đăng ký & Bảng xếp hạng -->
+<!-- Modal Đăng nhập & Bảng xếp hạng -->
 <dialog id="authModal" style="border:3px solid var(--line);border-radius:24px;padding:24px;background:var(--card);color:var(--ink);max-width:420px;width:92%;box-shadow:0 12px 30px rgba(0,0,0,0.25);">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
     <h3 id="modalTitle" style="font-size:24px;margin:0;">Đăng nhập</h3>
@@ -42,3 +383,462 @@
     </div>
   </div>
 </dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- SUPABASE CẤU HÌNH (Thay URL & Key của bạn tại đây) ---------- */
+const SUPABASE_URL = "https://okwwgbyzngdghxkork.supabase.co"; // Thay URL dự án của bạn
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."; // Thay anon key của bạn
+const sb = (window.supabase && SUPABASE_URL.indexOf("your-project") === -1) 
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+  : null;
+
+let authUser = null;
+let isSignUpMode = false;
+let syncTimer = null;
+
+/* ---------- DỮ LIỆU GAME ---------- */
+const LEVELS=[{n:'Seed',e:'🌰',min:0},{n:'Sprout',e:'🌱',min:100},{n:'Young Tree',e:'🌿',min:250},{n:'Forest Guardian',e:'🌳',min:450},{n:'Planet Guardian',e:'🌎',min:700}];
+const QUESTS=[
+ {id:'river',icon:'🌊',pts:50,vi:'Dọn rác dưới {river}: vớt 8 món rác đang trôi',en:'Clean the river: catch 8 pieces of floating trash.'},
+ {id:'lights',icon:'💡',pts:30,vi:'Đi vào phòng trống và {turn off the lights}',en:'Walk into the empty rooms and turn off the lights.'},
+ {id:'trip',icon:'🚲',pts:40,vi:'Chọn cách đi xanh: {walk}, {bike} hoặc {bus}',en:'Choose a green way to travel.'},
+ {id:'tree',icon:'🌳',pts:60,vi:'Trồng cây và hoa: {dig}, {plant}, {cover}, {water}',en:'Plant trees and flowers.'},
+ {id:'sortq',icon:'♻️',pts:30,vi:'Phân loại đúng 5 món ở trò {Sort the trash}',en:'Sort 5 pieces of trash correctly.'}
+];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+const BINS={
+ rec:{en:'Recyclable',vi:'Tái chế',c:'#8EC5F5',e:'♻️'},
+ org:{en:'Organic',vi:'Hữu cơ',c:'#8EDCA8',e:'🍃'},
+ haz:{en:'Hazardous',vi:'Nguy hại',c:'#FFB09A',e:'☠️'},
+ ew:{en:'E-waste',vi:'Rác điện tử',c:'#C7B3F2',e:'🔌'}
+};
+const TRASH=[
+ {e:'🥤',en:'plastic bottle',vi:'chai nhựa',bin:'rec',why:'Plastic bottles are recyclable.'},
+ {e:'🍌',en:'banana peel',vi:'vỏ chuối',bin:'org',why:'Banana peels are organic.'},
+ {e:'🔋',en:'battery',vi:'pin cũ',bin:'haz',why:'Batteries are hazardous.'},
+ {e:'📱',en:'old phone',vi:'điện thoại cũ',bin:'ew',why:'Old phones are e-waste.'},
+ {e:'🥫',en:'tin can',vi:'lon thiếc',bin:'rec',why:'Tin cans are recyclable.'},
+ {e:'🍎',en:'apple core',vi:'lõi táo',bin:'org',why:'Apple cores are organic.'}
+];
+const BADGES=[
+ {id:'plastic',n:'Plastic Fighter',t:'Hoàn thành nhiệm vụ chống rác thải nhựa'},
+ {id:'words',n:'Word Collector',t:'Sưu tầm 6 từ vựng tiếng Anh'},
+ {id:'sorter',n:'Ocean Guardian',t:'Phân loại đúng 5 món rác'},
+ {id:'planet',n:'Planet Guardian',t:'Đạt level cao nhất'}
+];
+
+const CONTS={
+ 1:{key:'asia',e:'🌏',vi:'Châu Á',en:'Asia',lat:38,lon:92,short:'Ô nhiễm không khí và rác nhựa trôi ra sông',ch:[{id:'river',icon:'🌊',en:'Clean the river',vi:'Dọn rác trên sông',game:'river'},{id:'trip',icon:'🚌',en:'Clean the city air',vi:'Chọn cách đi xanh',game:'trip'},{id:'sort',icon:'♻️',en:'Sort the trash',vi:'Phân loại rác',game:'sort'}]},
+ 2:{key:'africa',e:'🌍',vi:'Châu Phi',en:'Africa',lat:4,lon:20,short:'Hạn hán và sa mạc hóa',ch:[{id:'tree',icon:'🌳',en:'Plant trees',vi:'Trồng cây chặn sa mạc',game:'tree'},{id:'trip',icon:'🚶',en:'Travel green',vi:'Đi lại xanh',game:'trip'},{id:'sort',icon:'♻️',en:'Sort the trash',vi:'Phân loại rác',game:'sort'}]},
+ 3:{key:'europe',e:'🏰',vi:'Châu Âu',en:'Europe',lat:52,lon:16,short:'Rác thải điện tử và tiêu thụ năng lượng',ch:[{id:'lights',icon:'💡',en:'Turn off lights',vi:'Tiết kiệm điện',game:'lights'},{id:'trip',icon:'🚲',en:'Ride a bike',vi:'Đạp xe',game:'trip'},{id:'sort',icon:'♻️',en:'Sort e-waste',vi:'Phân loại rác điện tử',game:'sort'}]}
+};
+
+/* ---------- STATE QUẢN LÝ TIẾN TRÌNH ---------- */
+const KEY='green-planet-user-v2';
+const fresh=()=>({cont:{},saved:[],sortq:0,points:0,done:{},words:[],sorted:0,scans:0,journal:[],badges:[]});
+let S=fresh();
+try{const raw=localStorage.getItem(KEY);if(raw)S=Object.assign(fresh(),JSON.parse(raw));}catch(e){}
+
+const save=()=>{
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  if(authUser && sb){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(async ()=>{
+      const l = LEVELS[lvIdx()];
+      await sb.rpc('save_game_progress', {
+        p_points: S.points || 0,
+        p_level_idx: lvIdx(),
+        p_level_name: l ? l.n : 'Seed',
+        p_state: S
+      });
+    }, 1000);
+  }
+};
+
+const lvIdx=()=>{let i=0;LEVELS.forEach((l,k)=>{if(S.points>=l.min)i=k});return i};
+const health=()=>Math.min(100,Math.round(12+S.points/700*88));
+
+let toastT;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
+function speak(text){try{const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=.85;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
+
+function addPoints(n,msg){
+  const before=lvIdx();
+  S.points+=n;
+  const after=lvIdx();
+  checkBadges();save();renderHeader();renderScene();
+  if(after>before)toast(`🎉 Lên level ${LEVELS[after].e} ${LEVELS[after].n}!`);
+  else toast(msg||`+${n} điểm ⭐`);
+}
+
+function checkBadges(){
+  const has=id=>S.badges.includes(id);
+  const give=id=>{if(!has(id)){S.badges.push(id);toast('🏅 Huy hiệu mới: '+BADGES.find(b=>b.id===id).n);}};
+  if(S.words.length>=6)give('words');
+  if(S.sorted>=5)give('sorter');
+  if(lvIdx()>=4)give('planet');
+}
+
+/* ---------- SUPABASE LOGIC ĐĂNG NHẬP ---------- */
+async function setupAuth(){
+  if(!sb)return;
+  const {data:{session}}=await sb.auth.getSession();
+  if(session?.user){
+    authUser=session.user;
+    await syncDownData(authUser.id);
+  }
+  updateAuthUI();
+
+  sb.auth.onAuthStateChange(async (_event, session)=>{
+    authUser=session?.user || null;
+    updateAuthUI();
+    if(authUser) await syncDownData(authUser.id);
+  });
+}
+
+function updateAuthUI(){
+  const greeting=$('#authGreeting');
+  const actionBtn=$('#authActionBtn');
+  const avatar=$('#authAvatar');
+
+  if(authUser){
+    const name=authUser.user_metadata?.username || authUser.email.split('@')[0];
+    greeting.innerHTML=`Xin chào, <b style="color:var(--green-d);">${esc(name)}</b>`;
+    avatar.textContent='🌱';
+    actionBtn.textContent='Đăng xuất';
+    actionBtn.onclick=async()=>{
+      await sb.auth.signOut();
+      toast('Đã đăng xuất!');
+    };
+  }else{
+    greeting.textContent='Đang chơi với tư cách Khách';
+    avatar.textContent='👤';
+    actionBtn.textContent='Đăng nhập / Đăng ký';
+    actionBtn.onclick=()=>openModalUI('login');
+  }
+}
+
+async function syncDownData(userId){
+  try{
+    const {data,error}=await sb.from('profiles').select('*').eq('id',userId).single();
+    if(data && !error && data.game_state){
+      S=Object.assign(fresh(), data.game_state);
+      S.points=data.points || 0;
+      save();
+      renderAll();
+      toast(`Đã đồng bộ dữ liệu của bạn (${S.points} điểm ⭐)`);
+    }
+  }catch(e){}
+}
+
+const authModal=$('#authModal');
+function openModalUI(mode){
+  $('#authMsg').textContent='';
+  if(mode==='rank'){
+    $('#modalTitle').textContent='🏆 Bảng Xếp Hạng';
+    $('#authBox').hidden=true;
+    $('#rankBox').hidden=false;
+    renderLeaderboardList();
+  }else{
+    $('#authBox').hidden=false;
+    $('#rankBox').hidden=true;
+    switchAuthTab(mode==='signup');
+  }
+  authModal.showModal();
+}
+
+function switchAuthTab(isSignup){
+  isSignUpMode=isSignup;
+  $('#authMsg').textContent='';
+  $('#modalTitle').textContent=isSignup?'Tạo tài khoản':'Đăng nhập';
+  $('#signupFields').hidden=!isSignup;
+  $('#btnSubmitAuth').textContent=isSignup?'Đăng ký':'Đăng nhập';
+  $('#tabLogin').className=isSignup?'btn alt':'btn';
+  $('#tabSignup').className=isSignup?'btn':'btn alt';
+}
+
+$('#tabLogin').onclick=()=>switchAuthTab(false);
+$('#tabSignup').onclick=()=>switchAuthTab(true);
+$('#closeModalBtn').onclick=()=>authModal.close();
+$('#openRankBtn').onclick=()=>openModalUI('rank');
+
+$('#btnSubmitAuth').onclick=async()=>{
+  if(!sb){
+    $('#authMsg').textContent='Vui lòng kiểm tra lại URL & Key Supabase trong file code!';
+    return;
+  }
+  const email=$('#iptEmail').value.trim();
+  const password=$('#iptPassword').value.trim();
+  const username=$('#iptUsername').value.trim();
+
+  if(!email || !password){
+    $('#authMsg').textContent='Vui lòng điền đủ email và mật khẩu!';
+    return;
+  }
+
+  $('#btnSubmitAuth').disabled=true;
+  $('#authMsg').textContent='Đang xử lý...';
+
+  if(isSignUpMode){
+    const {data,error}=await sb.auth.signUp({
+      email,password,
+      options:{data:{username:username||email.split('@')[0]}}
+    });
+    $('#btnSubmitAuth').disabled=false;
+    if(error){
+      $('#authMsg').textContent='Lỗi: '+error.message;
+    }else{
+      $('#authMsg').textContent='✅ Đăng ký thành công!';
+      setTimeout(()=>authModal.close(),1200);
+    }
+  }else{
+    const {error}=await sb.auth.signInWithPassword({email,password});
+    $('#btnSubmitAuth').disabled=false;
+    if(error){
+      $('#authMsg').textContent='Lỗi: '+error.message;
+    }else{
+      authModal.close();
+    }
+  }
+};
+
+async function renderLeaderboardList(){
+  const rankList=$('#rankList');
+  rankList.innerHTML='<li style="text-align:center;padding:12px;">Đang tải danh sách...</li>';
+  if(!sb){rankList.innerHTML='<li style="text-align:center;">Chưa cấu hình cơ sở dữ liệu.</li>';return;}
+  const {data,error}=await sb.from('profiles').select('username, points, level_name').order('points',{ascending:false}).limit(10);
+  if(error||!data){rankList.innerHTML='<li style="text-align:center;">Không thể tải danh sách lúc này.</li>';return;}
+  rankList.innerHTML=data.map((p,idx)=>`
+    <li style="display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-radius:14px;background:var(--cream);border:2px solid var(--line);">
+      <span><b>#${idx+1}</b> ${idx===0?'🥇':idx===1?'🥈':'🥉'} <b>${esc(p.username||'Người chơi')}</b></span>
+      <span style="font-weight:800;color:var(--green-d);">${p.points||0} ⭐</span>
+    </li>
+  `).join('');
+}
+
+/* ---------- RENDER GIAO DIỆN CHÍNH ---------- */
+let currentTab='world', earth=null, city=null;
+function renderHeader(){
+  const l=LEVELS[lvIdx()];
+  $('#pts').textContent=S.points;$('#lvE').textContent=l.e;$('#lvN').textContent=l.n;$('#wc').textContent=S.words.length;
+}
+
+function renderScene(){
+  const h=health();
+  if(earth)earth.setHealth(h);
+  if(city)city.setHealth(h);
+  $('#hfill').style.width=h+'%';$('#hpct').textContent=h+'%';
+}
+
+$$('.tabs button').forEach(b=>b.addEventListener('click',()=>{
+  currentTab=b.dataset.tab;
+  $$('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  $$('.panel').forEach(p=>p.hidden=p.id!=='p-'+currentTab);
+  if(currentTab==='future')renderFuture();
+}));
+
+function renderQuests(){
+  $('#mode').textContent='🔤 Nhiệm vụ học tập & bảo vệ môi trường';
+  $('#qlist').innerHTML=QUESTS.map(q=>{
+    const done=!!S.done[q.id];
+    return `<div class="quest ${done?'done':''}">
+      <span class="ico">${q.icon}</span>
+      <div class="txt"><p>${esc(q.en)}</p><p class="vi">${esc(q.vi).replace(/[{}]/g,'')}</p></div>
+      <button class="mini" onclick="speak('${esc(q.en)}')">🔊</button>
+      ${done?`<span style="color:var(--green-d);font-weight:800;">✅ Xong</span>`:`<button class="btn" onclick="startQuest('${q.id}')">▶ Chơi +${q.pts}</button>`}
+    </div>`;
+  }).join('');
+  $('#badges').innerHTML=BADGES.map(b=>`<span class="badge ${S.badges.includes(b.id)?'got':''}">🏅 ${b.n}</span>`).join('');
+}
+
+window.startQuest=function(id){
+  const q=QUESTS.find(x=>x.id===id);if(!q)return;
+  if(id==='sortq'){$$('.tabs button')[2].click();toast('Phân loại đúng 5 món rác để hoàn thành nhé!');return;}
+  $('#qlist').hidden=true;
+  const box=$('#qplay');box.hidden=false;
+  box.innerHTML=`<div class="row" style="justify-content:space-between"><button class="btn alt" onclick="endQuest()">← Quay lại</button><span class="pill">⭐ +${q.pts}</span></div>
+    <h3 class="qh">${q.icon} ${esc(q.en)}</h3><div id="mg" style="margin-top:12px;"></div>`;
+  const win=()=>{
+    S.done[q.id]=true;addPoints(q.pts);
+    $('#mg').innerHTML=`<div class="fb ok">🎉 Hoàn thành nhiệm vụ! +${q.pts} điểm!</div><button class="btn" style="margin-top:10px;" onclick="endQuest()">Tiếp tục</button>`;
+  };
+  if(id==='river')playRiver($('#mg'),win);
+  else if(id==='lights')playLights($('#mg'),win);
+  else if(id==='trip')playTravel($('#mg'),win);
+  else if(id==='tree')playTree($('#mg'),win);
+};
+
+window.endQuest=function(){$('#qplay').hidden=true;$('#qlist').hidden=false;renderQuests();};
+
+/* Minigames */
+function playRiver(el,win){
+  let got=0;
+  el.innerHTML=`<p class="inst">Chạm vào 5 món rác đang trôi dạt trên sông!</p>
+    <div class="rv" id="rvbox"><div class="water"></div><div class="net">Rác đã vớt: <b id="rgot">0</b>/5</div>
+    ${[1,2,3,4,5].map((_,i)=>`<button class="it" style="top:${35+i*11}%;--d:${10+i*2}s;--dl:-${i*2}s;" onclick="catchTrash(this)"><span>🥤</span></button>`).join('')}
+    </div>`;
+  window.catchTrash=function(b){
+    b.remove();got++;$('#rgot').textContent=got;
+    if(got>=5)win();
+  };
+}
+
+function playLights(el,win){
+  const rooms=['Phòng khách','Phòng ngủ','Nhà bếp'];let on=3;
+  el.innerHTML=`<p class="inst">Tắt đèn ở các phòng không có người!</p>
+    <div class="house"><div class="roof"></div><div class="floors">
+      ${rooms.map((r,i)=>`<div class="rm" id="rm${i}"><span class="nm">${r}</span><span class="lamp">💡</span><button class="sw" onclick="toggleLight(${i})"><i></i></button></div>`).join('')}
+    </div></div>`;
+  window.toggleLight=function(i){
+    const el=$('#rm'+i);
+    if(!el.classList.contains('off')){el.classList.add('off');on--;}
+    if(on===0)win();
+  };
+}
+
+function playTravel(el,win){
+  el.innerHTML=`<p class="inst">Bạn đi học cách 1 km, bạn chọn phương tiện nào?</p>
+    <div class="choices">
+      <button class="choice" onclick="pickTravel(this, true)"><span class="ce">🚲</span><b>Bicycle</b><span class="vi">Xe đạp (Xanh)</span></button>
+      <button class="choice" onclick="pickTravel(this, false)"><span class="ce">🚗</span><b>Car</b><span class="vi">Ô tô (Xả khói)</span></button>
+    </div><p class="fb" id="tfb"></p>`;
+  window.pickTravel=function(b,good){
+    if(good){$('#tfb').className='fb ok';$('#tfb').textContent='✅ Tuyệt vời! Đi lại xanh giúp không khí trong lành.';setTimeout(win,1200);}
+    else{$('#tfb').className='fb no';$('#tfb').textContent='Chưa tối ưu, hãy chọn cách ít khói hơn nhé!';}
+  };
+}
+
+function playTree(el,win){
+  let step=0;const steps=['Đào hố','Gieo hạt','Lấp đất','Tưới nước'];
+  el.innerHTML=`<p class="inst">Bước ${step+1}: <b>${steps[step]}</b></p>
+    <div class="garden"><div class="plot sel"><span class="soil"></span><span class="pl" id="treeEmo">🕳️</span></div></div>
+    <button class="btn" style="margin-top:10px;" id="treeBtn" onclick="nextTreeStep()">Thực hiện bước này</button>`;
+  window.nextTreeStep=function(){
+    step++;
+    if(step===1)$('#treeEmo').textContent='🌱';
+    if(step===2)$('#treeEmo').textContent='🌿';
+    if(step===3)$('#treeEmo').textContent='🌳';
+    if(step>=4){win();return;}
+    el.querySelector('.inst').innerHTML=`Bước ${step+1}: <b>${steps[step]}</b>`;
+  };
+}
+
+/* Sort Game */
+let sortItems=[];
+function initSort(){
+  sortItems=shuffle([...TRASH]);renderSort();
+}
+function renderSort(){
+  if(!sortItems.length){
+    $('#game').innerHTML=`<div class="item">🏆 Đã phân loại hết! Chơi lại để ghi thêm điểm.<br><button class="btn" style="margin-top:10px;" onclick="initSort()">Chơi tiếp</button></div>`;
+    return;
+  }
+  const it=sortItems[0];
+  $('#game').innerHTML=`<div class="item"><div class="emo">${it.e}</div><div class="en">${esc(it.en)}</div><div>${esc(it.vi)}</div></div>
+    <div class="bins">${Object.entries(BINS).map(([k,v])=>`<button class="bin" style="background:${v.c}" onclick="checkSort('${k}')"><span class="be">${v.e}</span><span class="bn">${v.en}</span></button>`).join('')}</div>
+    <div class="fb" id="sfb"></div>`;
+}
+window.checkSort=function(binKey){
+  const it=sortItems[0];
+  if(binKey===it.bin){
+    $('#sfb').className='fb ok';$('#sfb').textContent='✅ Chính xác!';
+    if(!S.words.some(w=>w.en===it.en))S.words.push({en:it.en,vi:it.vi});
+    S.sorted++;addPoints(10);
+    sortItems.shift();
+    setTimeout(renderSort,1000);
+  }else{
+    $('#sfb').className='fb no';$('#sfb').textContent='Chưa đúng, thử lại nhé!';
+  }
+};
+
+/* Scanner mẫu */
+$('#pick').innerHTML=TRASH.map(t=>`<button onclick="chooseSample('${t.en}','${t.vi}','${t.e}')"><span>${t.e}</span>${t.vi}</button>`).join('');
+window.chooseSample=function(en,vi,e){
+  $('#scanResult').innerHTML=`<div class="result"><div class="en">${e} ${esc(en)} - ${esc(vi)}</div><p>Đã nhận diện thành công! Hãy bỏ vào đúng thùng rác.</p><button class="btn" onclick="addPoints(20, 'Đã học từ mới +20 điểm')">Đã bỏ đúng thùng +20</button></div>`;
+};
+
+/* Coach */
+$('#coachBtn').onclick=function(){
+  $('#coachOut').innerHTML=`<div class="plan"><div class="tip"><span class="ico">🚲</span><div><b>Gợi ý xanh:</b> Đi bộ hoặc đạp xe khi đi quãng đường ngắn.</div></div></div>`;
+};
+
+/* Journal */
+$('#jBtn').onclick=function(){
+  const t=$('#jtext').value.trim();if(!t)return;
+  S.journal.push({t});$('#jtext').value='';
+  addPoints(30,'+30 điểm Green Journal!');
+  renderJournal();
+};
+function renderJournal(){
+  $('#entries').innerHTML=S.journal.map(j=>`<div class="entry">📔 ${esc(j.t)}</div>`).join('');
+}
+
+/* 3D Scene setup */
+function initEarth(){
+  const cv=$('#earth'), box=$('#v3d');
+  const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(30, box.clientWidth/box.clientHeight, 0.1, 100);
+  cam.position.z=4.5;
+  const light=new THREE.DirectionalLight(0xffffff,1);light.position.set(3,2,3);scene.add(light);
+  scene.add(new THREE.AmbientLight(0x888888));
+  const globe=new THREE.Mesh(new THREE.SphereGeometry(1,32,32), new THREE.MeshPhongMaterial({color:0x4A90D9,wireframe:false}));
+  scene.add(globe);
+
+  function resize(){renderer.setSize(box.clientWidth, box.clientHeight, false);cam.aspect=box.clientWidth/box.clientHeight;cam.updateProjectionMatrix();}
+  window.addEventListener('resize',resize);resize();
+
+  function anim(){requestAnimationFrame(anim);globe.rotation.y+=0.005;renderer.render(scene,cam);}
+  anim();
+  return {setHealth:()=>{}};
+}
+
+function initCity(){
+  const cv=$('#citycv'), box=$('#vcity');
+  const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0x9ED8FF);
+  const cam=new THREE.PerspectiveCamera(35, box.clientWidth/box.clientHeight, 0.1, 100);
+  cam.position.set(0,4,6);cam.lookAt(0,0,0);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const b=new THREE.Mesh(new THREE.BoxGeometry(1,1.5,1), new THREE.MeshLambertMaterial({color:0x3DBE6E}));
+  scene.add(b);
+
+  function resize(){renderer.setSize(box.clientWidth, box.clientHeight, false);cam.aspect=box.clientWidth/box.clientHeight;cam.updateProjectionMatrix();}
+  window.addEventListener('resize',resize);resize();
+  function anim(){requestAnimationFrame(anim);renderer.render(scene,cam);}
+  anim();
+  return {setHealth:()=>{}};
+}
+
+$('#viewtog').onclick=e=>{
+  const b=e.target.closest('[data-view]');if(!b)return;
+  const v=b.dataset.view;
+  $$('#viewtog button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  $('#v3d').hidden=v!=='3d';$('#vcity').hidden=v!=='2d';
+};
+
+/* Khởi tạo toàn bộ */
+function renderAll(){
+  renderHeader();renderScene();renderQuests();renderJournal();
+  $('#words').innerHTML=S.words.map(w=>`<span class="word">${esc(w.en)}</span>`).join('');
+}
+
+$('#boost').onclick=()=>addPoints(100,'⚡ +100 điểm demo');
+$('#reset').onclick=()=>{if(confirm('Chơi lại từ đầu?')){S=fresh();save();renderAll();initSort();toast('Bắt đầu lại!');}};
+
+try{earth=initEarth();}catch(e){}
+try{city=initCity();}catch(e){}
+renderAll();
+initSort();
+setupAuth();
+})();
+</script>
+</body>
+</html>
